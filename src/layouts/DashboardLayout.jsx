@@ -15,7 +15,7 @@ export default function DashboardLayout() {
   useEffect(() => {
     if (!user) {
       console.log("User is not authenticated. Redirecting to login.");
-      navigate('/login');
+      navigate('/dashboard');
     }
   }, [user, navigate]);
 

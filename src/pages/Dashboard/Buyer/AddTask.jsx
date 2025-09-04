@@ -1,6 +1,6 @@
-// src/pages/Dashboard/Buyer/AddTask.jsx
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // useNavigate instead of useHistory
+import { useNavigate } from 'react-router-dom';
+import AxiosSecure from '../../../hooks/axiosSecure.js';
 
 export default function AddTask() {
   const [taskTitle, setTaskTitle] = useState('');
@@ -14,54 +14,71 @@ export default function AddTask() {
   const [buyerCoins, setBuyerCoins] = useState(100); // Example value, replace with actual buyer's coins
   const navigate = useNavigate(); // useNavigate for navigation
 
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    const totalPayableAmount = requiredWorkers * payableAmount;
+  const totalPayableAmount = requiredWorkers * payableAmount;
 
-    // Check if the buyer has enough coins
-    if (totalPayableAmount > buyerCoins) {
-      setStatusMessage('Not available Coin. Please purchase coins.');
-      alert('Not available Coin. Please purchase coins.');
-      // Navigate to the Purchase Coin page
-      navigate('/purchase-coin');
-      return;
-    }
+  // Check if the buyer has enough coins
+  if (totalPayableAmount > buyerCoins) {
+    setStatusMessage('Not enough coins. Please purchase more.');
+    alert('Not enough coins. Please purchase more.');
+    navigate('/purchase-coin');
+    return;
+  }
 
-    // Task data to save
-    const newTask = {
-      task_title: taskTitle,
-      task_detail: taskDetail,
-      required_workers: requiredWorkers,
-      payable_amount: payableAmount,
-      completion_date: completionDate,
-      submission_info: submissionInfo,
-      task_image_url: taskImageUrl,
-    };
+  // Ensure token is available
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    navigate('/login');
+    return;
+  }
 
-    // Save the task into the database
-    try {
-      const response = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTask),
-      });
+  // Log the data before sending it
+  console.log({
+    task_title: taskTitle,
+    task_detail: taskDetail,
+    required_workers: requiredWorkers,
+    payable_amount: payableAmount,
+    completion_date: completionDate,
+    submission_info: submissionInfo,
+    task_image_url: taskImageUrl,
+  });
 
-      if (response.ok) {
-        // Reduce the buyer's coins
-        setBuyerCoins(buyerCoins - totalPayableAmount);
-        setStatusMessage('Task added successfully!');
-        alert('Task added successfully!');
-      } else {
-        setStatusMessage('Error adding task');
-        alert('Error adding task');
-      }
-    } catch (error) {
-      setStatusMessage('Error adding task');
-      console.error('Error adding task:', error);
-    }
+  // Task data to save
+  const newTask = {
+    task_title: taskTitle,
+    task_detail: taskDetail,
+    required_workers: requiredWorkers,
+    payable_amount: payableAmount,
+    completion_date: completionDate,
+    submission_info: submissionInfo,
+    task_image_url: taskImageUrl,
   };
+
+  try {
+    const response = await AxiosSecure.post('/api/tasks', newTask, {
+      headers: {
+        Authorization: `Bearer ${token}`, // Send token in request header
+      },
+    });
+
+    if (response.status === 201) {
+      setBuyerCoins(buyerCoins - totalPayableAmount);
+      setStatusMessage('Task added successfully!');
+      alert('Task added successfully!');
+      navigate('/dashboard');
+    } else {
+      setStatusMessage('Error adding task');
+      alert('Error adding task');
+    }
+  } catch (error) {
+    console.error('Error adding task:', error);
+    setStatusMessage('Error adding task');
+  }
+};
+
+
 
   return (
     <div className="p-6">
