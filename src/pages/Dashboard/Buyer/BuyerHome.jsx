@@ -1,4 +1,3 @@
-// src/pages/Dashboard/Buyer/BuyerHome.jsx
 import React, { useState, useEffect } from 'react';
 
 function BuyerHome() {
@@ -8,45 +7,50 @@ function BuyerHome() {
   const [submissions, setSubmissions] = useState([]);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    // Fetch tasks created by the buyer
-    const fetchTasks = async () => {
-      try {
-        const response = await fetch('/api/tasks'); // Fetch tasks from API
-        const data = await response.json();
-        setTotalTaskCount(data.length);
+  // Fetch tasks created by the buyer
+  const fetchTasks = async () => {
+    try {
+      const response = await fetch('/api/tasks'); // Fetch tasks from API
 
-        const pendingTasks = data.reduce((sum, task) => sum + task.required_workers, 0);
-        const payment = data.reduce((sum, task) => sum + task.payable_amount, 0);
-
-        setPendingTaskCount(pendingTasks);
-        setTotalPayment(payment);
-      } catch (err) {
-        setError('Failed to load tasks');
-        console.error(err);
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status} - ${response.statusText}`);
       }
-    };
 
-    // Fetch submissions for the buyer's tasks with status "pending"
-    const fetchSubmissions = async () => {
-      try {
-        const response = await fetch('/api/submissions?status=pending'); // Fetch submissions with "pending" status
-        const data = await response.json();
-        setSubmissions(data);
-      } catch (err) {
-        setError('Failed to load submissions');
-        console.error(err);
+      const data = await response.json(); // Parse the JSON response
+      setTotalTaskCount(data.length);
+
+      const pendingTasks = data.reduce((sum, task) => sum + task.required_workers, 0);
+      const payment = data.reduce((sum, task) => sum + task.payable_amount, 0);
+
+      setPendingTaskCount(pendingTasks);
+      setTotalPayment(payment);
+    } catch (err) {
+      setError('Failed to load tasks');
+      console.error('Error fetching tasks:', err);
+    }
+  };
+
+  // Fetch submissions for the buyer's tasks with status "pending"
+  const fetchSubmissions = async () => {
+    try {
+      const response = await fetch('/api/submissions?status=pending'); // Fetch submissions with "pending" status
+
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status} - ${response.statusText}`);
       }
-    };
 
-    fetchTasks();
-    fetchSubmissions();
-  }, []);
+      const data = await response.json(); // Parse the JSON response
+      setSubmissions(data);
+    } catch (err) {
+      setError('Failed to load submissions');
+      console.error('Error fetching submissions:', err);
+    }
+  };
 
   // Handle approving a submission
   const handleApprove = async (submissionId) => {
     try {
-      const response = await fetch(`/api/submissions/${submissionId}/approve`, { // Replace with your endpoint
+      const response = await fetch(`/api/submissions/${submissionId}/approve`, {
         method: 'PUT',
       });
 
@@ -68,13 +72,13 @@ function BuyerHome() {
   // Handle rejecting a submission
   const handleReject = async (submissionId, taskId) => {
     try {
-      const response = await fetch(`/api/submissions/${submissionId}/reject`, { // Replace with your endpoint
+      const response = await fetch(`/api/submissions/${submissionId}/reject`, {
         method: 'PUT',
       });
 
       if (response.ok) {
         // Increase required_workers for the task by 1
-        await fetch(`/api/tasks/${taskId}/increase-required-workers`, { // Replace with your endpoint
+        await fetch(`/api/tasks/${taskId}/increase-required-workers`, {
           method: 'PUT',
         });
 
@@ -88,6 +92,12 @@ function BuyerHome() {
     }
   };
 
+  // UseEffect to fetch data on component mount
+  useEffect(() => {
+    fetchTasks();
+    fetchSubmissions();
+  }, []);
+
   return (
     <div className="p-6">
       <h2 className="text-2xl font-bold text-gray-700 mb-6">Buyer Dashboard</h2>
@@ -99,7 +109,7 @@ function BuyerHome() {
         <p className="text-gray-600">Total Payment Paid: ${totalPayment}</p>
       </div>
 
-      <h3 className="text-xl font-semibold text-gray-800 mb-4">Task to Review</h3>
+      <h3 className="text-xl font-semibold text-gray-800 mb-4">Tasks to Review</h3>
       <table className="min-w-full table-auto border-collapse">
         <thead>
           <tr>
@@ -110,27 +120,33 @@ function BuyerHome() {
           </tr>
         </thead>
         <tbody>
-          {submissions.map((submission) => (
-            <tr key={submission._id} className="hover:bg-gray-100">
-              <td className="px-4 py-2 border-b">{submission.worker_name}</td>
-              <td className="px-4 py-2 border-b">{submission.task_title}</td>
-              <td className="px-4 py-2 border-b">${submission.payable_amount}</td>
-              <td className="px-4 py-2 border-b">
-                <button
-                  onClick={() => handleApprove(submission._id)}
-                  className="bg-green-600 text-white px-4 py-2 rounded mr-2"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={() => handleReject(submission._id, submission.task_id)}
-                  className="bg-red-600 text-white px-4 py-2 rounded"
-                >
-                  Reject
-                </button>
-              </td>
+          {submissions.length > 0 ? (
+            submissions.map((submission) => (
+              <tr key={submission._id} className="hover:bg-gray-100">
+                <td className="px-4 py-2 border-b">{submission.worker_name}</td>
+                <td className="px-4 py-2 border-b">{submission.task_title}</td>
+                <td className="px-4 py-2 border-b">${submission.payable_amount}</td>
+                <td className="px-4 py-2 border-b">
+                  <button
+                    onClick={() => handleApprove(submission._id)}
+                    className="bg-green-600 text-white px-4 py-2 rounded mr-2"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleReject(submission._id, submission.task_id)}
+                    className="bg-red-600 text-white px-4 py-2 rounded"
+                  >
+                    Reject
+                  </button>
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan="4" className="px-4 py-2 text-center text-gray-600">No pending submissions</td>
             </tr>
-          ))}
+          )}
         </tbody>
       </table>
     </div>

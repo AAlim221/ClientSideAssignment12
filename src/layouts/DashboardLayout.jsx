@@ -4,76 +4,100 @@ import { AuthContext } from '../context/AuthContext';
 import { FaBell, FaSignOutAlt } from 'react-icons/fa';
 import AxiosSecure from '../hooks/axiosSecure';
 
+
 export default function DashboardLayout() {
   const { user, logout } = useContext(AuthContext);
   const [role, setRole] = useState(null);
   const [roleLoading, setRoleLoading] = useState(true);
+  const [coin, setCoin] = useState(0); // Added state for coin
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  // Redirect to login if user is not authenticated
+  // Check if user is logged in
   useEffect(() => {
     if (!user) {
       console.log("User is not authenticated. Redirecting to login.");
-      navigate('/dashboard');
+      navigate('/login');
     }
   }, [user, navigate]);
 
-  // Fetch user role from backend (MongoDB)
-  useEffect(() => {
-    const fetchRole = async () => {
-      try {
-        console.log('Fetching role for user:', user?.email);
-
-        if (!user?.email) {
-          throw new Error("User email is missing");
-        }
-
-        const url = `/api/users/${user?.email}/role`;
-        console.log(`Calling API: ${url}`);
-        
-        // Use AxiosSecure if it's a secure request
-        const response = await AxiosSecure.get(url);
-
-        if (response.status === 200 && response.data?.role) {
-          setRole(response.data.role);
-        } else {
-          setError('Role data is missing in the response.');
-          console.error('Error: Role data is missing in the response');
-        }
-
-        setRoleLoading(false);
-      } catch (err) {
-        console.error('Error fetching role:', err.message);
-        setError(`Error fetching role data: ${err.message}`);
-        setRoleLoading(false);
-      }
-    };
-
-    if (user?.email) {
-      fetchRole();
-    } else {
-      setError('User is not authenticated or missing email');
-      setRoleLoading(false);
-    }
-  }, [user?.email]);
-
-  // Handle logout
-  const handleLogout = async () => {
+  // Fetch role and coin data
+ useEffect(() => {
+  const fetchRoleAndCoins = async () => {
     try {
-      await logout();
-      navigate('/login');
+      console.log('Fetching role and coins for user:', user?.email);
+
+      if (!user?.email) {
+        throw new Error("User email is missing");
+      }
+
+      const url = `/api/users/${user?.email}/role`;
+      console.log(`Calling API: ${url}`);
+
+      // Fetch user role and coin data
+      const response = await AxiosSecure.get(url);
+
+      // Log full response details for debugging
+      console.log('API Response:', response);
+
+      // Log the data part of the response
+      console.log('API Response Data:', response.data);
+
+      // Ensure that the response contains the correct data
+      if (response.status === 200 && response.data?.role) {
+        setRole(response.data.role);
+        
+        // Check if coin exists in the response
+        if (response.data?.coin !== undefined) {
+          setCoin(response.data.coin);  // Update coin value in the state
+          console.log("Updated coin value:", response.data.coin);  // Log the updated coin value
+        } else {
+          setError('Coins data is missing in the response');
+        }
+      } else {
+        setError('Role data is missing in the response.');
+        console.error('Error: Role data is missing in the response');
+      }
+
+      setRoleLoading(false);
     } catch (err) {
-      console.error('Logout error:', err);
+      console.error('Error fetching role:', err.message);
+      setError(`Error fetching role and coin data: ${err.message}`);
+      setRoleLoading(false);
     }
   };
 
-  // Show loading message if role is loading
+  if (user?.email) {
+    fetchRoleAndCoins();
+  } else {
+    setError('User is not authenticated or missing email');
+    setRoleLoading(false);
+  }
+}, [user?.email]);
+
+
+const handleLogout = async () => {
+  if (logout) {
+    try {
+      await logout(); // Attempt logout
+      navigate('/login'); // Redirect to login after successful logout
+    } catch (err) {
+      console.error("Logout failed:", err);
+      setError('Logout failed. Please try again later.');
+    }
+  } else {
+    console.error("Logout function is not available.");
+    setError('Logout function is not available.');
+  }
+};
+
+
+  // Loading state
   if (roleLoading) {
     return <div>Loading role...</div>;
   }
 
-  // Show error message if there's an error fetching the role
+  // Error handling state
   if (error) {
     return (
       <div>
@@ -85,7 +109,7 @@ export default function DashboardLayout() {
     );
   }
 
-  // Menu items based on role
+  // Menu Items Based on Role
   const menuItems = {
     Worker: [
       { label: 'Home', path: 'worker-home' },
@@ -109,14 +133,16 @@ export default function DashboardLayout() {
 
   const currentRole = role?.charAt(0).toUpperCase() + role?.slice(1);
 
-  // Check if the role is valid
+  // Check for valid role
   if (!currentRole || !menuItems[currentRole]) {
     return <div>Invalid role. Please contact support.</div>;
   }
 
+  // Debugging the coin state
+  console.log("Current coin value:", coin);
+
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Sidebar */}
       <aside className="bg-gray-900 text-white w-full lg:w-64 p-6">
         <div className="text-2xl font-bold mb-6">MicroTask</div>
         <nav className="space-y-2">
@@ -136,13 +162,11 @@ export default function DashboardLayout() {
         </nav>
       </aside>
 
-      {/* Content Area */}
       <div className="flex-1 flex flex-col">
-        {/* Topbar */}
         <header className="bg-white shadow px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-2">
           <div className="flex items-center gap-4">
             <span className="text-sm text-blue-600 font-semibold">
-              Coins: {user?.coin || 0}
+              Coins: {coin !== undefined ? coin : 'Loading...'}
             </span>
             <button className="text-gray-600 relative hover:text-blue-600">
               <FaBell size={20} />
@@ -168,12 +192,10 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="flex-1 bg-gray-50 p-6 overflow-y-auto">
           <Outlet />
         </main>
 
-        {/* Footer */}
         <footer className="bg-white text-center py-4 shadow-inner text-gray-500 text-sm">
           © {new Date().getFullYear()} MicroTask | All rights reserved.
         </footer>

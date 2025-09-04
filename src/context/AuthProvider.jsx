@@ -23,6 +23,8 @@ const AuthProvider = ({ children }) => {
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             setUser(userCredential.user);  // Store the created user in state
+            const token = await userCredential.user.getIdToken();  // Get token and store it
+            localStorage.setItem('authToken', token);  // Store token in localStorage
             return userCredential;
         } catch (error) {
             console.error('Error creating user:', error.message);
@@ -38,6 +40,8 @@ const AuthProvider = ({ children }) => {
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             setUser(userCredential.user);  // Store the signed-in user in state
+            const token = await userCredential.user.getIdToken();  // Get token and store it
+            localStorage.setItem('authToken', token);  // Store token in localStorage
             return userCredential;
         } catch (error) {
             console.error('Error signing in:', error.message);
@@ -53,6 +57,8 @@ const AuthProvider = ({ children }) => {
         try {
             const result = await signInWithPopup(auth, googleProvider);
             setUser(result.user);  // Store the Google signed-in user in state
+            const token = await result.user.getIdToken();  // Get token and store it
+            localStorage.setItem('authToken', token);  // Store token in localStorage
             return result;
         } catch (error) {
             console.error('Error signing in with Google:', error.message);
@@ -79,6 +85,7 @@ const AuthProvider = ({ children }) => {
         setLoading(true);
         try {
             await signOut(auth);
+            localStorage.removeItem('authToken');  // Clear token on sign out
             setUser(null); // Explicitly set user to null after sign out
         } catch (error) {
             console.error("Error during logout:", error);
