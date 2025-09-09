@@ -11,16 +11,9 @@ const useUserRole = () => {
     enabled: !!user?.email && !authLoading,
     queryFn: async () => {
       try {
-        // Ensure you get the latest token
-        const token = await user?.getIdToken(true); // Get fresh token
-        if (!token) throw new Error('Missing authorization token');
-
+        // No token handling needed anymore
         const encodedEmail = encodeURIComponent(user.email);
-        const res = await axiosSecure.get(`/api/users/${encodedEmail}/role`, {
-          headers: {
-            Authorization: `Bearer ${token}`,  // Send the token in the header
-          },
-        });
+        const res = await axiosSecure.get(`/api/users/${encodedEmail}/role`);
         return res.data.role;
       } catch (err) {
         console.error('Error fetching user role:', err);

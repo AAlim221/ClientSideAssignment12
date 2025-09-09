@@ -43,12 +43,13 @@ const Registration = () => {
 
         try {
             // Register user with Firebase Authentication (if used)
-            await createUser(email, password); // No need to store the result
+            const userCredential = await createUser(email, password);
+            const userUid = userCredential.user.uid;  // Firebase provides the UID after registration
 
             // Coins assignment based on role
             const coins = role === 'buyer' ? 50 : 10;
 
-            // Store user data in the database
+            // Store user data in the database with the UID
             await axiosSecure.post('/api/register', { 
                 email,
                 password,
@@ -56,6 +57,7 @@ const Registration = () => {
                 name,
                 profilePictureUrl: profilePicture,
                 coins,
+                uid: userUid // Include UID in the user data
             });
 
             // Redirect user to the dashboard after successful registration

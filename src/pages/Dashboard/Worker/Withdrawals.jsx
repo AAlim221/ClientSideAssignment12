@@ -1,10 +1,10 @@
-// src/pages/Dashboard/Worker/Withdrawals.jsx
 import React, { useState, useEffect } from 'react';
+import useAuth from '../../../hooks/useAuth'; // Custom hook to get authenticated user
+import AxiosSecure from '../../../hooks/axiosSecure'; // Make sure AxiosSecure is used for API calls
 
 function Withdrawals() {
-  const userEmail = 'worker@example.com'; // Replace with actual worker email from AuthContext
-  const userName = 'John Worker'; // Replace with actual worker name from AuthContext
-  const [coins] = useState(300); // Example: User's current coins, replace with actual value
+  const { user, loading } = useAuth(); // Using user from authentication context
+  const [coins, setCoins] = useState(0); // Coins will be fetched dynamically
   const [withdrawCoin, setWithdrawCoin] = useState(0);
   const [withdrawAmount, setWithdrawAmount] = useState(0);
   const [paymentSystem, setPaymentSystem] = useState('');
@@ -12,8 +12,29 @@ function Withdrawals() {
   const [statusMessage, setStatusMessage] = useState('');
   const [isWithdrawButtonDisabled, setIsWithdrawButtonDisabled] = useState(false);
 
+  // Fetch user coins from the backend using AxiosSecure
+  useEffect(() => {
+    if (user && user.email) {
+      const fetchCoins = async () => {
+        try {
+          const response = await AxiosSecure.get(`/api/users/${user.email}/role`);
+          if (response.status === 200) {
+            setCoins(response.data.coin); // Set user coins dynamically
+          } else {
+            setStatusMessage('Failed to fetch coins');
+          }
+        } catch (err) {
+          setStatusMessage('Error fetching coins');
+          console.error(err);
+        }
+      };
+      fetchCoins();
+    }
+  }, [user]);
+
+  // Handle coin change
   const handleCoinChange = (e) => {
-    const coinsToWithdraw = e.target.value;
+    const coinsToWithdraw = Number(e.target.value); // Convert the input value to a number
     setWithdrawCoin(coinsToWithdraw);
     setWithdrawAmount(coinsToWithdraw / 20); // 20 coins = 1 dollar
 
@@ -34,6 +55,7 @@ function Withdrawals() {
     setAccountNumber(e.target.value);
   };
 
+  // Handle submit
   const handleWithdrawalSubmit = async (e) => {
     e.preventDefault();
 
@@ -47,9 +69,12 @@ function Withdrawals() {
       return;
     }
 
+    // Fallback for missing user name
+    const workerName = user?.name || 'Unknown User';  // Fallback if name is not available
+
     const withdrawalData = {
-      worker_email: userEmail,
-      worker_name: userName,
+      worker_email: user.email,  // Using actual email from authentication
+      worker_name: workerName,   // Using fallback name if name is not available
       withdrawal_coin: withdrawCoin,
       withdrawal_amount: withdrawAmount,
       payment_system: paymentSystem,
@@ -59,16 +84,26 @@ function Withdrawals() {
     };
 
     try {
-      const response = await fetch('/api/withdrawals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(withdrawalData),
-      });
+      // Step 1: Submit withdrawal request to /api/withdrawals
+      const response = await AxiosSecure.post('/api/withdrawals', withdrawalData);
 
-      if (response.ok) {
+      if (response.status === 201) {
         setStatusMessage('Withdrawal request submitted successfully!');
+        
+        // Step 2: Deduct coins after successful withdrawal submission
+        const deductCoinsResponse = await AxiosSecure.patch('/api/users/deduct-coins', {
+          userId: user.uid,  // Assuming user.uid is available
+          totalCost: withdrawCoin,
+        });
+
+        if (deductCoinsResponse.status === 200) {
+          console.log('Coins deducted successfully');
+        } else {
+          setStatusMessage('Failed to deduct coins');
+          console.error('Failed to deduct coins:', deductCoinsResponse.data.message);
+        }
+
+        // Reset form values
         setWithdrawCoin(0);
         setWithdrawAmount(0);
         setPaymentSystem('');
@@ -82,12 +117,22 @@ function Withdrawals() {
     }
   };
 
+  // Check for withdrawal conditions (e.g., coins left)
   useEffect(() => {
     if (withdrawCoin > coins) {
       setIsWithdrawButtonDisabled(true);
       setStatusMessage('Insufficient coin');
     }
   }, [withdrawCoin, coins]);
+
+  // Show loading or error message if the user is not authenticated
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!user) {
+    return <div className="text-red-500">You need to be logged in to withdraw.</div>;
+  }
 
   return (
     <div className="p-6">

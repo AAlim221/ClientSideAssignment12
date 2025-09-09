@@ -5,59 +5,64 @@ export default function AdminManageUsers() {
   const [users, setUsers] = useState([]);
   const [statusMessage, setStatusMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false); // Loading state for actions
+
+  // Function to fetch users
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosSecure.get('/api/admin/users');
+      setUsers(response.data.users);  // Populate the users list
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setStatusMessage('Error fetching users. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch users on page load
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await axiosSecure.get('/api/admin/users');
-        setUsers(response.data);  // Populate the users list
-      } catch (error) {
-        console.error('Error fetching users:', error);
-        setStatusMessage('Error fetching users. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUsers();
+    fetchUsers(); // Call fetchUsers to load users when the component is mounted
   }, []);
 
   const handleRemoveUser = async (userId) => {
     try {
+      setActionLoading(true);
       const response = await axiosSecure.post('/api/admin/remove-user', { userId });
       if (response.status === 200) {
         setStatusMessage('User removed successfully');
-        // Update users list to reflect the removal of the user
-        setUsers(prevUsers => prevUsers.filter((user) => user._id !== userId));
+        // Fetch users again after removal
+        await fetchUsers();
       }
     } catch (error) {
       console.error('Error removing user:', error);
       setStatusMessage('Error removing user. Please try again.');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleUpdateRole = async (userId, newRole) => {
     try {
+      setActionLoading(true);
       const response = await axiosSecure.post('/api/admin/update-role', { userId, newRole });
       if (response.status === 200) {
         setStatusMessage('User role updated successfully');
-        // Update the role in the state to reflect the change in UI
-        setUsers(prevUsers => 
-          prevUsers.map((user) =>
-            user._id === userId ? { ...user, role: newRole } : user
-          )
-        );
+        // Fetch users again after role update
+        await fetchUsers();
       }
     } catch (error) {
       console.error('Error updating user role:', error);
       setStatusMessage('Error updating user role. Please try again.');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold text-gray-700 mb-6">Manage Users</h2>
+    <div className="p-6 text-black"> {/* Apply text-black class here */}
+      <h2 className="text-2xl font-bold mb-6">Manage Users</h2>
 
       {statusMessage && <p className="text-red-600">{statusMessage}</p>}
 
@@ -65,8 +70,8 @@ export default function AdminManageUsers() {
         <p>Loading users...</p>
       ) : (
         <table className="w-full table-auto border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100">
+          <thead className="bg-gray-100">
+            <tr>
               <th className="border px-4 py-2">Name</th>
               <th className="border px-4 py-2">Email</th>
               <th className="border px-4 py-2">Photo</th>
@@ -93,6 +98,7 @@ export default function AdminManageUsers() {
                       value={user.role}
                       onChange={(e) => handleUpdateRole(user._id, e.target.value)}
                       className="p-2 border rounded-md"
+                      disabled={actionLoading}
                     >
                       <option value="Admin">Admin</option>
                       <option value="Buyer">Buyer</option>
@@ -104,8 +110,9 @@ export default function AdminManageUsers() {
                     <button
                       className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
                       onClick={() => handleRemoveUser(user._id)}
+                      disabled={actionLoading}
                     >
-                      Remove
+                      {actionLoading ? 'Removing...' : 'Remove'}
                     </button>
                   </td>
                 </tr>

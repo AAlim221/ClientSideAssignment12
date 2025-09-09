@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import axiosSecure from '../../../hooks/axiosSecure'; // Import axiosSecure for secure API calls
 import { useNavigate } from 'react-router-dom';
+import useAuth from '../../../hooks/useAuth'; // Custom hook for Firebase auth
+import AxiosSecure from '../../../hooks/axiosSecure';
 
 const AddTask = () => {
+  const { user, loading } = useAuth(); // Using the custom hook for authentication
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDetail, setTaskDetail] = useState('');
   const [requiredWorkers, setRequiredWorkers] = useState('');
@@ -10,164 +12,194 @@ const AddTask = () => {
   const [completionDate, setCompletionDate] = useState('');
   const [submissionInfo, setSubmissionInfo] = useState('');
   const [taskImageUrl, setTaskImageUrl] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // Loading state for form submission
-  const navigate = useNavigate(); // To navigate after success
+  const [buyerName, setBuyerName] = useState(''); // New state for Buyer Name
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
-  // Handle form submission
+  // Redirect to login page if the user is not logged in
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!user) {
+    navigate('/login');
+    return null; // Prevent rendering the form if the user is not logged in
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true); // Set loading to true
 
-    // Validation check
-    if (!taskTitle || !taskDetail || !requiredWorkers || !payableAmount || !completionDate || !submissionInfo || !taskImageUrl) {
-      setErrorMessage('All fields are required.');
-      setIsLoading(false);
+    // Convert to numbers and validate
+    const workers = Number(requiredWorkers);
+    const amount = Number(payableAmount);
+
+    if (workers <= 0 || amount <= 0) {
+      setError('Please enter valid positive values for workers and payable amount.');
+      return;
+    }
+
+    const totalCost = workers * amount;
+
+    // Check if user has enough coins
+    if (user.coins < totalCost) {
+      alert("Not enough coins. Please purchase coins.");
+      navigate('/purchase-coin');
       return;
     }
 
     const taskData = {
-      task_title: taskTitle,
-      task_detail: taskDetail,
-      required_workers: parseInt(requiredWorkers),
-      payable_amount: parseFloat(payableAmount),
-      completion_date: completionDate,
-      submission_info: submissionInfo,
-      task_image_url: taskImageUrl,
+      taskTitle,
+      taskDetail,
+      requiredWorkers: workers,
+      payableAmount: amount,
+      completionDate,
+      submissionInfo,
+      taskImageUrl,
+      userId: user.uid,  // Ensure user.uid is passed correctly
+      buyerName, // Include buyerName in task data
     };
 
+    console.log("Task data being sent:", taskData);
+
     try {
-      const token = localStorage.getItem('authToken'); // Get the JWT token
+      // Step 1: Create task
+      const taskResponse = await AxiosSecure.post('/api/tasks', taskData);
 
-      // Sending the token in the Authorization header
-      const response = await axiosSecure.post('/api/add-task', taskData, {
-        headers: {
-          'Authorization': `Bearer ${token}`, // Pass token in Authorization header
-        },
-      });
+      if (taskResponse.status === 200) {
+        // Step 2: Deduct coins (no role check anymore)
+        const coinResponse = await AxiosSecure.patch('/api/users/deduct-coins', {
+          userId: user.uid,  // Use user.uid here
+          totalCost,
+        });
 
-      if (response.data.message) {
-        alert(response.data.message); // Show success message
-        navigate('/dashboard'); // Navigate to the dashboard or task list
+        if (coinResponse.status === 200) {
+          alert('Task created and coins deducted successfully!');
+          navigate('/dashboard');
+        } else {
+          setError('Failed to deduct coins. Please try again.');
+        }
+      } else {
+        setError('Failed to create task. Please try again.');
       }
-    } catch (error) {
-      setErrorMessage(error.response?.data?.message || 'Error occurred while adding the task');
-    } finally {
-      setIsLoading(false); // Reset loading state
+    } catch (err) {
+      console.error('Error submitting task:', err.response ? err.response.data : err);
+      setError(`An error occurred while creating the task. Server message: ${err.response?.data?.message || err.message}`);
     }
   };
 
   return (
     <div className="max-w-3xl mx-auto p-6 bg-white shadow-lg rounded-lg">
-      <h2 className="text-2xl font-bold text-center mb-6">Add New Task</h2>
+      <h2 className="text-2xl text-blue-300 font-semibold text-center mb-6">Add New Task</h2>
 
-      {errorMessage && (
-        <p className="text-red-600 text-center mb-4">{errorMessage}</p>
-      )}
+      {/* Error Display */}
+      {error && <div className="bg-red-200 p-2 rounded mb-4 text-red-600">{error}</div>}
 
-      <form onSubmit={handleSubmit}>
-        <div className="space-y-4">
-          {/* Task Title */}
-          <div className="form-group">
-            <label className="block text-gray-700 font-semibold">Task Title</label>
-            <input
-              type="text"
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              required
-              className="w-full p-3 mt-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="Enter task title"
-            />
-          </div>
-
-          {/* Task Detail */}
-          <div className="form-group">
-            <label className="block text-gray-700 font-semibold">Task Detail</label>
-            <textarea
-              value={taskDetail}
-              onChange={(e) => setTaskDetail(e.target.value)}
-              required
-              className="w-full p-3 mt-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="Provide detailed task description"
-              rows="4"
-            />
-          </div>
-
-          {/* Required Workers */}
-          <div className="form-group">
-            <label className="block text-gray-700 font-semibold">Required Workers</label>
-            <input
-              type="number"
-              value={requiredWorkers}
-              onChange={(e) => setRequiredWorkers(e.target.value)}
-              required
-              className="w-full p-3 mt-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="Number of workers required"
-            />
-          </div>
-
-          {/* Payable Amount */}
-          <div className="form-group">
-            <label className="block text-gray-700 font-semibold">Payable Amount per Worker</label>
-            <input
-              type="number"
-              value={payableAmount}
-              onChange={(e) => setPayableAmount(e.target.value)}
-              required
-              className="w-full p-3 mt-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="Enter amount payable to each worker"
-            />
-          </div>
-
-          {/* Completion Date */}
-          <div className="form-group">
-            <label className="block text-gray-700 font-semibold">Completion Date</label>
-            <input
-              type="date"
-              value={completionDate}
-              onChange={(e) => setCompletionDate(e.target.value)}
-              required
-              className="w-full p-3 mt-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-
-          {/* Submission Info */}
-          <div className="form-group">
-            <label className="block text-gray-700 font-semibold">Submission Info</label>
-            <input
-              type="text"
-              value={submissionInfo}
-              onChange={(e) => setSubmissionInfo(e.target.value)}
-              required
-              className="w-full p-3 mt-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="What should the worker submit (e.g., screenshot, proof)"
-            />
-          </div>
-
-          {/* Task Image URL */}
-          <div className="form-group">
-            <label className="block text-gray-700 font-semibold">Task Image URL</label>
-            <input
-              type="text"
-              value={taskImageUrl}
-              onChange={(e) => setTaskImageUrl(e.target.value)}
-              required
-              className="w-full p-3 mt-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-              placeholder="URL of the task image"
-            />
-          </div>
-
-          {/* Submit Button */}
-          <div className="flex justify-center mt-6">
-            <button
-              type="submit"
-              className="w-1/2 py-3 bg-blue-600 text-white font-semibold rounded-md focus:outline-none hover:bg-blue-700"
-              disabled={isLoading} // Disable the button while loading
-            >
-              {isLoading ? 'Submitting...' : 'Add Task'}
-            </button>
-          </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Task Title Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Task Title</label>
+          <input
+            type="text"
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            required
+            className="w-full mt-2 p-3 border border-gray-300 rounded-md text-black"
+          />
         </div>
+
+        {/* Task Detail Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Task Detail</label>
+          <textarea
+            value={taskDetail}
+            onChange={(e) => setTaskDetail(e.target.value)}
+            required
+            className="w-full mt-2 p-3 border border-gray-300 rounded-md text-black"
+          ></textarea>
+        </div>
+
+        {/* Buyer Name Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Buyer Name</label>
+          <input
+            type="text"
+            value={buyerName}
+            onChange={(e) => setBuyerName(e.target.value)}
+            required
+            className="w-full mt-2 p-3 border border-gray-300 rounded-md text-black"
+          />
+        </div>
+
+        {/* Required Workers Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Required Workers</label>
+          <input
+            type="number"
+            value={requiredWorkers}
+            onChange={(e) => setRequiredWorkers(e.target.value)}
+            required
+            className="w-full mt-2 p-3 border border-gray-300 rounded-md text-black"
+          />
+        </div>
+
+        {/* Payable Amount Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Payable Amount per Worker</label>
+          <input
+            type="number"
+            value={payableAmount}
+            onChange={(e) => setPayableAmount(e.target.value)}
+            required
+            className="w-full mt-2 p-3 border border-gray-300 rounded-md text-black"
+          />
+        </div>
+
+        {/* Completion Date Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Completion Date</label>
+          <input
+            type="date"
+            value={completionDate}
+            onChange={(e) => setCompletionDate(e.target.value)}
+            required
+            className="w-full mt-2 p-3 border border-gray-300 rounded-md text-black"
+          />
+        </div>
+
+        {/* Submission Info Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Submission Info</label>
+          <input
+            type="text"
+            value={submissionInfo}
+            onChange={(e) => setSubmissionInfo(e.target.value)}
+            required
+            className="w-full mt-2 p-3 border border-gray-300 rounded-md text-black"
+          />
+        </div>
+
+        {/* Task Image URL Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Task Image URL</label>
+          <input
+            type="url"
+            value={taskImageUrl}
+            onChange={(e) => setTaskImageUrl(e.target.value)}
+            required
+            className="w-full mt-2 p-3 border border-gray-300 rounded-md text-black"
+          />
+        </div>
+
+        {/* Submit Button */}
+        <button
+          type="submit"
+          className={`w-full py-3 mt-4 text-white font-semibold rounded-md transition-colors ${
+            loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+          }`}
+          disabled={loading}
+        >
+          {loading ? 'Adding Task...' : 'Add Task'}
+        </button>
       </form>
     </div>
   );

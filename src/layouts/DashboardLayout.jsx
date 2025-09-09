@@ -1,19 +1,17 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import useAuth from '../hooks/useAuth'; // Custom hook for Firebase auth
 import { FaBell, FaSignOutAlt } from 'react-icons/fa';
 import AxiosSecure from '../hooks/axiosSecure';
 
-
 export default function DashboardLayout() {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logOut } = useAuth(); // Make sure it’s 'logOut' from AuthContext
   const [role, setRole] = useState(null);
   const [roleLoading, setRoleLoading] = useState(true);
-  const [coin, setCoin] = useState(0); // Added state for coin
+  const [coin, setCoin] = useState(0);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  // Check if user is logged in
   useEffect(() => {
     if (!user) {
       console.log("User is not authenticated. Redirecting to login.");
@@ -21,83 +19,56 @@ export default function DashboardLayout() {
     }
   }, [user, navigate]);
 
-  // Fetch role and coin data
- useEffect(() => {
-  const fetchRoleAndCoins = async () => {
-    try {
-      console.log('Fetching role and coins for user:', user?.email);
-
-      if (!user?.email) {
-        throw new Error("User email is missing");
-      }
-
-      const url = `/api/users/${user?.email}/role`;
-      console.log(`Calling API: ${url}`);
-
-      // Fetch user role and coin data
-      const response = await AxiosSecure.get(url);
-
-      // Log full response details for debugging
-      console.log('API Response:', response);
-
-      // Log the data part of the response
-      console.log('API Response Data:', response.data);
-
-      // Ensure that the response contains the correct data
-      if (response.status === 200 && response.data?.role) {
-        setRole(response.data.role);
-        
-        // Check if coin exists in the response
-        if (response.data?.coin !== undefined) {
-          setCoin(response.data.coin);  // Update coin value in the state
-          console.log("Updated coin value:", response.data.coin);  // Log the updated coin value
-        } else {
-          setError('Coins data is missing in the response');
+  useEffect(() => {
+    const fetchRoleAndCoins = async () => {
+      try {
+        if (!user?.email) {
+          throw new Error("User email is missing");
         }
-      } else {
-        setError('Role data is missing in the response.');
-        console.error('Error: Role data is missing in the response');
-      }
 
-      setRoleLoading(false);
-    } catch (err) {
-      console.error('Error fetching role:', err.message);
-      setError(`Error fetching role and coin data: ${err.message}`);
+        const url = `/api/users/${user?.email}/role`;
+        const response = await AxiosSecure.get(url);
+
+        if (response.status === 200 && response.data?.role) {
+          setRole(response.data.role);
+          if (response.data?.coin !== undefined) {
+            setCoin(response.data.coin);
+          } else {
+            setError('Coins data is missing in the response');
+          }
+        } else {
+          setError('Role data is missing in the response.');
+        }
+
+        setRoleLoading(false);
+      } catch (err) {
+        setError(`Error fetching role and coin data: ${err.message}`);
+        setRoleLoading(false);
+      }
+    };
+
+    if (user?.email) {
+      fetchRoleAndCoins();
+    } else {
+      setError('User is not authenticated or missing email');
       setRoleLoading(false);
     }
-  };
+  }, [user?.email]);
 
-  if (user?.email) {
-    fetchRoleAndCoins();
-  } else {
-    setError('User is not authenticated or missing email');
-    setRoleLoading(false);
-  }
-}, [user?.email]);
-
-
-const handleLogout = async () => {
-  if (logout) {
+  const handleLogout = async () => {
     try {
-      await logout(); // Attempt logout
-      navigate('/login'); // Redirect to login after successful logout
+      await logOut(); // Ensure 'logOut' function is available from useAuth
+      navigate('/login'); // Redirect to login after logout
     } catch (err) {
       console.error("Logout failed:", err);
       setError('Logout failed. Please try again later.');
     }
-  } else {
-    console.error("Logout function is not available.");
-    setError('Logout function is not available.');
-  }
-};
+  };
 
-
-  // Loading state
   if (roleLoading) {
-    return <div>Loading role...</div>;
+    return <div>Loading...</div>;
   }
 
-  // Error handling state
   if (error) {
     return (
       <div>
@@ -120,7 +91,7 @@ const handleLogout = async () => {
     Buyer: [
       { label: 'Home', path: 'buyer-home' },
       { label: 'Add New Tasks', path: 'add-task' },
-      { label: 'My Tasks', path: 'my-tasks' },
+      { label: 'My Tasks', path: `my-tasks/${user?.uid}` },
       { label: 'Purchase Coin', path: 'purchase-coin' },
       { label: 'Payment History', path: 'payment-history' },
     ],
@@ -133,13 +104,9 @@ const handleLogout = async () => {
 
   const currentRole = role?.charAt(0).toUpperCase() + role?.slice(1);
 
-  // Check for valid role
   if (!currentRole || !menuItems[currentRole]) {
     return <div>Invalid role. Please contact support.</div>;
   }
-
-  // Debugging the coin state
-  console.log("Current coin value:", coin);
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
@@ -175,7 +142,7 @@ const handleLogout = async () => {
 
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <div className="text-gray-700 font-medium">{user?.displayName || 'User'}</div>
+              <div className="text-gray-700 font-medium">{user?.name || 'User'}</div>
               <div className="text-sm text-gray-500">{role}</div>
             </div>
             <img

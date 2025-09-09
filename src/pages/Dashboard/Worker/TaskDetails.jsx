@@ -1,4 +1,3 @@
-// src/pages/Dashboard/Worker/TaskDetails.jsx
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -76,7 +75,7 @@ function TaskDetails() {
   }
 
   if (!task) {
-    return <div>Loading...</div>;
+    return <div className="text-red-600">Task not available</div>;
   }
 
   return (

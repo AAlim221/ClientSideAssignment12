@@ -1,184 +1,194 @@
-// src/pages/Dashboard/Buyer/MyTasks.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import AxiosSecure from '../../../hooks/axiosSecure'; // Ensure Axios instance is set up
 
-function MyTasks() {
+const TaskManagementPage = () => {
   const [tasks, setTasks] = useState([]);
   const [error, setError] = useState(null);
-  const [selectedTask, setSelectedTask] = useState(null); // For updating the task details
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskDetail, setTaskDetail] = useState('');
-  const [submissionDetails, setSubmissionDetails] = useState('');
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [taskToUpdate, setTaskToUpdate] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  // Fetch tasks from the API
   useEffect(() => {
-    // Fetch tasks created by the user
     const fetchTasks = async () => {
       try {
-        const response = await fetch('/api/tasks'); // Fetch tasks from API
-        const data = await response.json();
-        setTasks(data.sort((a, b) => new Date(b.completion_date) - new Date(a.completion_date))); // Sort by completion date in descending order
+        const response = await AxiosSecure.get('/api/admin/tasks');
+        setTasks(response.data.tasks);
       } catch (err) {
-        setError('Failed to load tasks');
-        console.error(err);
+        setError('Failed to fetch tasks');
+        console.error('Error fetching tasks:', err);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchTasks();
   }, []);
 
-  const handleUpdate = async (taskId) => {
-    // Update task in the database
-    const updatedTask = {
-      task_title: taskTitle,
-      task_detail: taskDetail,
-      submission_details: submissionDetails,
-    };
-
+  // Handle task update
+  const handleUpdateTask = async (updatedTask) => {
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatedTask),
-      });
-
-      if (response.ok) {
-        alert('Task updated successfully');
-        // Fetch the updated tasks after the update
-        const updatedTasks = tasks.map((task) =>
-          task._id === taskId ? { ...task, ...updatedTask } : task
-        );
-        setTasks(updatedTasks);
-        setSelectedTask(null); // Close the update form
-      } else {
-        alert('Error updating task');
-      }
+      const response = await AxiosSecure.patch(`/api/tasks/${updatedTask._id}`, updatedTask);
+      setTasks((prevTasks) => prevTasks.map((task) => (task._id === updatedTask._id ? updatedTask : task)));
+      setModalOpen(false);
     } catch (err) {
       console.error('Error updating task:', err);
-      alert('Error updating task');
     }
   };
 
-  const handleDelete = async (taskId, requiredWorkers, payableAmount) => {
-    // Delete the task and calculate refill amount
+  // Handle task delete
+  const handleDeleteTask = async (taskId) => {
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        const refillAmount = requiredWorkers * payableAmount;
-        alert(`Task deleted successfully. Refill amount: $${refillAmount}`);
-
-        // Increase the user's coin balance for uncompleted tasks (update this based on your logic)
-        await fetch('/api/users/refill-coins', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ refillAmount }),
-        });
-
-        setTasks(tasks.filter((task) => task._id !== taskId)); // Remove the deleted task from the UI
-      } else {
-        alert('Error deleting task');
-      }
+      await AxiosSecure.delete(`/api/tasks/${taskId}`);
+      setTasks((prevTasks) => prevTasks.filter((task) => task._id !== taskId));
     } catch (err) {
       console.error('Error deleting task:', err);
-      alert('Error deleting task');
     }
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold text-gray-700 mb-6">My Tasks</h2>
-      {error && <p className="text-red-600">{error}</p>}
+    <div className="container mx-auto p-4">
+      {loading && <div className="text-center text-gray-500">Loading tasks...</div>}
+      {error && <div className="text-red-500 mb-4">{error}</div>}
 
-      <table className="min-w-full table-auto border-collapse">
-        <thead>
-          <tr>
-            <th className="px-4 py-2 text-left border-b">Task Title</th>
-            <th className="px-4 py-2 text-left border-b">Task Detail</th>
-            <th className="px-4 py-2 text-left border-b">Submission Details</th>
-            <th className="px-4 py-2 text-left border-b">Required Workers</th>
-            <th className="px-4 py-2 text-left border-b">Payable Amount</th>
-            <th className="px-4 py-2 text-left border-b">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tasks.map((task) => (
-            <tr key={task._id} className="hover:bg-gray-100">
-              <td className="px-4 py-2 border-b">{task.task_title}</td>
-              <td className="px-4 py-2 border-b">{task.task_detail}</td>
-              <td className="px-4 py-2 border-b">{task.submission_details}</td>
-              <td className="px-4 py-2 border-b">{task.required_workers}</td>
-              <td className="px-4 py-2 border-b">${task.payable_amount}</td>
-              <td className="px-4 py-2 border-b">
+      {/* Tasks Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {tasks.length === 0 ? (
+          <div className="col-span-full text-center p-4 text-black">No tasks available</div>
+        ) : (
+          tasks.map((task) => (
+            <div key={task._id} className="bg-white shadow-lg rounded-lg p-4 hover:shadow-xl transition duration-200 relative">
+              {/* Buttons in the top-right corner */}
+              <div className="absolute top-2 right-2 space-x-2">
                 <button
-                  onClick={() => {
-                    setSelectedTask(task);
-                    setTaskTitle(task.task_title);
-                    setTaskDetail(task.task_detail);
-                    setSubmissionDetails(task.submission_details);
-                  }}
-                  className="bg-blue-600 text-white px-4 py-2 rounded mr-2"
+                  onClick={() => { setTaskToUpdate(task); setModalOpen(true); }}
+                  className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition duration-200"
                 >
                   Update
                 </button>
                 <button
-                  onClick={() => handleDelete(task._id, task.required_workers, task.payable_amount)}
-                  className="bg-red-600 text-white px-4 py-2 rounded"
+                  onClick={() => handleDeleteTask(task._id)}
+                  className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition duration-200"
                 >
                   Delete
                 </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </div>
 
-      {/* Update Task Form */}
-      {selectedTask && (
-        <div className="mt-6 bg-white p-6 rounded-lg shadow-md">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Update Task</h3>
-          <div className="mb-4">
-            <label htmlFor="taskTitle" className="block text-gray-700">Task Title</label>
-            <input
-              type="text"
-              id="taskTitle"
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-md"
-            />
+              {/* Task Image */}
+              {task.taskImageUrl && (
+                <div className="mb-4">
+                  <img src={task.taskImageUrl} alt={task.taskTitle} className="w-full h-48 object-cover rounded-md" />
+                </div>
+              )}
+
+              {/* Task Title and Details */}
+             <div className="text-black max-w-full">
+  <h3 className="text-xl font-semibold break-words">
+taskTitle:
+    {task.taskTitle}</h3>
+  <p className="text-gray-600 break-words">
+taskDetail:{task.taskDetail}</p>
+  <p className="text-gray-500 mt-2 break-words">submissionInfo:{task.submissionInfo}</p>
+</div>
+
+
+              {/* Task Details */}
+              <div className="mt-4 text-black">
+                <div>
+                  <span className="text-sm text-gray-500">Required Workers: </span>
+                  <span className="font-semibold">{task.requiredWorkers}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Payable Amount: </span>
+                  <span className="font-semibold">${task.payableAmount}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Completion Date: </span>
+                  <span className="font-semibold">{task.completionDate}</span>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Modal for Updating Task */}
+      {isModalOpen && taskToUpdate && (
+        <div className="fixed inset-0 flex justify-center items-center bg-gray-800 bg-opacity-50 z-50">
+          <div className="bg-white p-6 rounded-lg w-1/3 animate__animated animate__fadeIn animate__faster">
+            <h2 className="text-xl font-bold mb-4 text-black">Update Task</h2>
+            <div className="mb-4">
+              <label className="block text-gray-700">Task Title</label>
+              <input
+                type="text"
+                className="w-full p-2 border border-gray-300 rounded"
+                value={taskToUpdate.taskTitle}
+                onChange={(e) => setTaskToUpdate({ ...taskToUpdate, taskTitle: e.target.value })}
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700">Task Detail</label>
+              <textarea
+                className="w-full p-2 border border-gray-300 rounded"
+                value={taskToUpdate.taskDetail}
+                onChange={(e) => setTaskToUpdate({ ...taskToUpdate, taskDetail: e.target.value })}
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700">Submission Info</label>
+              <input
+                type="text"
+                className="w-full p-2 border border-gray-300 rounded"
+                value={taskToUpdate.submissionInfo}
+                onChange={(e) => setTaskToUpdate({ ...taskToUpdate, submissionInfo: e.target.value })}
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700">Required Workers</label>
+              <input
+                type="number"
+                className="w-full p-2 border border-gray-300 rounded"
+                value={taskToUpdate.requiredWorkers}
+                onChange={(e) => setTaskToUpdate({ ...taskToUpdate, requiredWorkers: e.target.value })}
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700">Payable Amount</label>
+              <input
+                type="number"
+                className="w-full p-2 border border-gray-300 rounded"
+                value={taskToUpdate.payableAmount}
+                onChange={(e) => setTaskToUpdate({ ...taskToUpdate, payableAmount: e.target.value })}
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700">Completion Date</label>
+              <input
+                type="date"
+                className="w-full p-2 border border-gray-300 rounded"
+                value={taskToUpdate.completionDate}
+                onChange={(e) => setTaskToUpdate({ ...taskToUpdate, completionDate: e.target.value })}
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => handleUpdateTask(taskToUpdate)}
+                className="bg-blue-500 text-white px-4 py-2 rounded-md mr-2 hover:bg-blue-600 transition duration-200"
+              >
+                Update
+              </button>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 transition duration-200"
+              >
+                Close
+              </button>
+            </div>
           </div>
-          <div className="mb-4">
-            <label htmlFor="taskDetail" className="block text-gray-700">Task Detail</label>
-            <textarea
-              id="taskDetail"
-              value={taskDetail}
-              onChange={(e) => setTaskDetail(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-md"
-            ></textarea>
-          </div>
-          <div className="mb-4">
-            <label htmlFor="submissionDetails" className="block text-gray-700">Submission Details</label>
-            <textarea
-              id="submissionDetails"
-              value={submissionDetails}
-              onChange={(e) => setSubmissionDetails(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-md"
-            ></textarea>
-          </div>
-          <button
-            onClick={() => handleUpdate(selectedTask._id)}
-            className="bg-green-600 text-white py-2 px-4 rounded-md"
-          >
-            Update Task
-          </button>
         </div>
       )}
     </div>
   );
-}
+};
 
-export default MyTasks;
+export default TaskManagementPage;

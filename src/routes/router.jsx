@@ -34,9 +34,9 @@ import ManageTasks from '../pages/Dashboard/Admin/ManageTasks.jsx';
 
 // Route Guards
 import PrivateRoute from '../routes/SecretRoutes/PrivateRoute.jsx';
-import AdminRoute from '../routes/SecretRoutes/AdminRoute.jsx';
-import BuyerRoute from '../routes/SecretRoutes/BuyerRoute.jsx';
-import WorkerRoute from '../routes/SecretRoutes/WorkerRoute.jsx';
+//import AdminRoute from '../routes/SecretRoutes/AdminRoute.jsx';
+//import BuyerRoute from '../routes/SecretRoutes/BuyerRoute.jsx';
+//import WorkerRoute from '../routes/SecretRoutes/WorkerRoute.jsx';
 
 export const router = createBrowserRouter([
   {
@@ -67,7 +67,7 @@ export const router = createBrowserRouter([
       // Buyer Routes
       { path: 'buyer-home', element: <BuyerHome /> },
       { path: 'add-task', element: <AddTask /> },
-      { path: 'my-tasks', element: <MyTasks />},
+      { path: 'my-tasks/:userId', element: <MyTasks />},
       { path: 'purchase-coin', element: <PurchaseCoin /> },
       { path: 'payment-history', element: <PaymentHistory /> },
 

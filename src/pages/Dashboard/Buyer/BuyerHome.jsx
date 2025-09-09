@@ -1,156 +1,199 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import AxiosSecure from '../../../hooks/axiosSecure'; // Axios instance
 
-function BuyerHome() {
-  const [totalTaskCount, setTotalTaskCount] = useState(0);
-  const [pendingTaskCount, setPendingTaskCount] = useState(0);
-  const [totalPayment, setTotalPayment] = useState(0);
-  const [submissions, setSubmissions] = useState([]);
+const BuyerHome = ({ userId }) => {
+  const [dashboardData, setDashboardData] = useState({
+    totalTaskCount: 0,
+    pendingTaskCount: 0,
+    totalPayment: 0,
+  });
+  const [tasksToReview, setTasksToReview] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedSubmission, setSelectedSubmission] = useState(null); // For modal
 
-  // Fetch tasks created by the buyer
-  const fetchTasks = async () => {
+  // Memoized function to fetch dashboard data
+  const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await fetch('/api/tasks'); // Fetch tasks from API
-
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status} - ${response.statusText}`);
-      }
-
-      const data = await response.json(); // Parse the JSON response
-      setTotalTaskCount(data.length);
-
-      const pendingTasks = data.reduce((sum, task) => sum + task.required_workers, 0);
-      const payment = data.reduce((sum, task) => sum + task.payable_amount, 0);
-
-      setPendingTaskCount(pendingTasks);
-      setTotalPayment(payment);
-    } catch (err) {
-      setError('Failed to load tasks');
-      console.error('Error fetching tasks:', err);
-    }
-  };
-
-  // Fetch submissions for the buyer's tasks with status "pending"
-  const fetchSubmissions = async () => {
-    try {
-      const response = await fetch('/api/submissions?status=pending'); // Fetch submissions with "pending" status
-
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status} - ${response.statusText}`);
-      }
-
-      const data = await response.json(); // Parse the JSON response
-      setSubmissions(data);
-    } catch (err) {
-      setError('Failed to load submissions');
-      console.error('Error fetching submissions:', err);
-    }
-  };
-
-  // Handle approving a submission
-  const handleApprove = async (submissionId) => {
-    try {
-      const response = await fetch(`/api/submissions/${submissionId}/approve`, {
-        method: 'PUT',
-      });
-
-      if (response.ok) {
-        setSubmissions(submissions.map(submission =>
-          submission._id === submissionId
-            ? { ...submission, status: 'approved' }
-            : submission
-        ));
-        alert('Submission approved');
-      } else {
-        alert('Error approving submission');
-      }
+      const response = await AxiosSecure.get(`/api/buyer-dashboard/${userId}`);
+      console.log('Dashboard Data:', response.data); // Log response to verify data
+      setDashboardData(response.data);
+      setError(null);
     } catch (error) {
-      console.error('Error approving submission:', error);
+      console.error('Error fetching dashboard data:', error);
+      setError('Failed to fetch dashboard data');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [userId]);
 
-  // Handle rejecting a submission
-  const handleReject = async (submissionId, taskId) => {
+  // Memoized function to fetch tasks to review
+  const fetchTasksToReview = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await fetch(`/api/submissions/${submissionId}/reject`, {
-        method: 'PUT',
-      });
-
-      if (response.ok) {
-        // Increase required_workers for the task by 1
-        await fetch(`/api/tasks/${taskId}/increase-required-workers`, {
-          method: 'PUT',
-        });
-
-        setSubmissions(submissions.filter(submission => submission._id !== submissionId));
-        alert('Submission rejected');
-      } else {
-        alert('Error rejecting submission');
-      }
+      const response = await AxiosSecure.get(`/api/buyer-reviews/${userId}`);
+      console.log('Tasks to Review:', response.data); // Log response to verify data
+      setTasksToReview(response.data?.pendingSubmissions || []);
+      setError(null);
     } catch (error) {
-      console.error('Error rejecting submission:', error);
+      console.error('Error fetching tasks to review:', error);
+      setError('Failed to fetch tasks to review');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [userId]);
 
-  // UseEffect to fetch data on component mount
+  // Fetch data when the component mounts
   useEffect(() => {
-    fetchTasks();
-    fetchSubmissions();
-  }, []);
+    fetchDashboardData();
+    fetchTasksToReview();
+  }, [fetchDashboardData, fetchTasksToReview]);
+
+  // Handle approve action
+  const handleApprove = async (taskId, submissionId) => {
+    if (window.confirm('Are you sure you want to approve this submission?')) {
+      try {
+        await AxiosSecure.patch(`/api/tasks/approve/${taskId}/${submissionId}`);
+        fetchDashboardData();
+        fetchTasksToReview();
+      } catch (error) {
+        console.error('Error approving submission:', error);
+        setError('Failed to approve submission');
+      }
+    }
+  };
+
+  // Handle reject action
+  const handleReject = async (taskId, submissionId) => {
+    if (window.confirm('Are you sure you want to reject this submission?')) {
+      try {
+        await AxiosSecure.patch(`/api/tasks/reject/${taskId}/${submissionId}`);
+        fetchDashboardData();
+        fetchTasksToReview();
+      } catch (error) {
+        console.error('Error rejecting submission:', error);
+        setError('Failed to reject submission');
+      }
+    }
+  };
+
+  // Handle modal view
+  const handleViewSubmission = (submission) => {
+    setSelectedSubmission(submission); // Show the selected submission in the modal
+  };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold text-gray-700 mb-6">Buyer Dashboard</h2>
-      {error && <p className="text-red-600">{error}</p>}
+    <div className="container mx-auto p-6">
+      {/* Dashboard Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-white shadow-lg rounded-lg p-6">
+          <h2 className="text-2xl font-semibold text-gray-700">Dashboard</h2>
+          {loading ? (
+            <p className="text-gray-500">Loading...</p>
+          ) : error ? (
+            <p className="text-red-500">{error}</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <p className="text-gray-600">Total Tasks</p>
+                <p className="text-gray-900">{dashboardData.totalTaskCount}</p>
+              </div>
+              <div className="flex justify-between">
+                <p className="text-gray-600">Pending Tasks</p>
+                <p className="text-gray-900">{dashboardData.pendingTaskCount}</p>
+              </div>
+              <div className="flex justify-between">
+                <p className="text-gray-600">Total Payment</p>
+                <p className="text-gray-900">${dashboardData.totalPayment}</p>
+              </div>
+            </div>
+          )}
+        </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <h3 className="text-xl font-semibold text-gray-800">Total Task Count: {totalTaskCount}</h3>
-        <p className="text-gray-600">Total Pending Tasks: {pendingTaskCount}</p>
-        <p className="text-gray-600">Total Payment Paid: ${totalPayment}</p>
+        {/* Tasks to Review Section */}
+        <div className="col-span-2 bg-white shadow-lg rounded-lg p-6">
+          <h3 className="text-xl font-semibold text-gray-700">Tasks to Review</h3>
+          {loading ? (
+            <p className="text-gray-500">Loading tasks...</p>
+          ) : error ? (
+            <p className="text-red-500">{error}</p>
+          ) : tasksToReview.length === 0 ? (
+            <p className="text-gray-500">No tasks to review</p>
+          ) : (
+            <table className="min-w-full bg-white border border-gray-300 rounded-lg">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="py-3 px-6 text-left text-gray-600">Worker</th>
+                  <th className="py-3 px-6 text-left text-gray-600">Task Title</th>
+                  <th className="py-3 px-6 text-left text-gray-600">Payable Amount</th>
+                  <th className="py-3 px-6 text-left text-gray-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasksToReview.map((task) =>
+                  task.submissions && task.submissions.length > 0 ? (
+                    task.submissions.map((submission) => (
+                      <tr key={submission._id} className="hover:bg-gray-50">
+                        <td className="py-3 px-6">{submission.workerName}</td>
+                        <td className="py-3 px-6">{task.taskTitle}</td>
+                        <td className="py-3 px-6">${task.payableAmount}</td>
+                        <td className="py-3 px-6 space-x-2">
+                          <button
+                            onClick={() => handleApprove(task._id, submission._id)}
+                            className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleReject(task._id, submission._id)}
+                            className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                          >
+                            Reject
+                          </button>
+                          <button
+                            onClick={() => handleViewSubmission(submission)}
+                            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                          >
+                            View Submission
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr key={task._id}>
+                      <td colSpan="4" className="text-center py-3 px-6 text-gray-500">
+                        No submissions found
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      <h3 className="text-xl font-semibold text-gray-800 mb-4">Tasks to Review</h3>
-      <table className="min-w-full table-auto border-collapse">
-        <thead>
-          <tr>
-            <th className="px-4 py-2 text-left border-b">Worker Name</th>
-            <th className="px-4 py-2 text-left border-b">Task Title</th>
-            <th className="px-4 py-2 text-left border-b">Payable Amount</th>
-            <th className="px-4 py-2 text-left border-b">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {submissions.length > 0 ? (
-            submissions.map((submission) => (
-              <tr key={submission._id} className="hover:bg-gray-100">
-                <td className="px-4 py-2 border-b">{submission.worker_name}</td>
-                <td className="px-4 py-2 border-b">{submission.task_title}</td>
-                <td className="px-4 py-2 border-b">${submission.payable_amount}</td>
-                <td className="px-4 py-2 border-b">
-                  <button
-                    onClick={() => handleApprove(submission._id)}
-                    className="bg-green-600 text-white px-4 py-2 rounded mr-2"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleReject(submission._id, submission.task_id)}
-                    className="bg-red-600 text-white px-4 py-2 rounded"
-                  >
-                    Reject
-                  </button>
-                </td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan="4" className="px-4 py-2 text-center text-gray-600">No pending submissions</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      {/* Modal for Viewing Submission Details */}
+      {selectedSubmission && (
+        <div className="fixed inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full">
+            <h3 className="text-xl font-semibold">Submission Details</h3>
+            <p className="mt-4"><strong>Worker Name:</strong> {selectedSubmission.workerName}</p>
+            <p><strong>Task Title:</strong> {selectedSubmission.taskTitle}</p>
+            <p><strong>Submission Info:</strong> {selectedSubmission.submissionInfo}</p>
+            <p><strong>Payable Amount:</strong> ${selectedSubmission.payableAmount}</p>
+            <button
+              onClick={() => setSelectedSubmission(null)}
+              className="mt-4 px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
 
 export default BuyerHome;
